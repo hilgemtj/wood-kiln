@@ -53,7 +53,7 @@ float *moistureLevel = moistureLevels[0];
 float *megaOhms = moistureLevels[1];
 int nLevels = sizeof(moistureLevels[0]) / sizeof(moistureLevels[0][0]);
 
-int loopDelay = 150000; // Milliseconds of loop delay
+unsigned long loopDelay = 150000; // Milliseconds of loop delay
 
 float moistureDiff = 0;
 unsigned long prevMillis = millis();
@@ -115,9 +115,11 @@ float getMoisturePct(float arr[], int n, float target) {
 
     // If target is greater than mid
     else {
-      if (mid < n - 1 && target < arr[mid + 1])
+      if (mid < n - 1 && target < arr[mid + 1]) {
         return getClosest(arr[mid],
                           arr[mid + 1], target);
+      }
+        
         // update i
         i = mid + 1; 
     }
