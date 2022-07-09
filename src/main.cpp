@@ -28,7 +28,7 @@
 #include <Adafruit_Sensor.h>
 #include <DHT.h>
 #include <DHT_U.h>
-#include <./components/moisture_criteria.h>
+#include <./components/moisture_data/moisture_criteria.h>
 
 #define DHTPIN 2     // Digital pin connected to the DHT sensor 
 #define DHTTYPE    DHT22     // DHT 22 (AM2302)
@@ -49,8 +49,11 @@ LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
 float temperature = 0;
 float humidity = 0;
 
-float *moistureLevel = getMoistureLevels();
+float *moistureLevel = moistureLevels[0];
+float *megaOhms = moistureLevels[1];
+int nLevels = sizeof(moistureLevels[0]) / sizeof(moistureLevels[0][0]);
 
+int loopDelay = 150000; // Milliseconds of loop delay
 
 float moistureDiff = 0;
 unsigned long prevMillis = millis();
@@ -64,58 +67,66 @@ float Rref = 993000;          // Reference resistor's value in ohms (you can giv
 float R = 0;               // Tested resistors default value
 
 
+float getClosest(float val1, float val2, float target) {
+  if (target - val1 >= val2 - target)
+    return val2;
+  else
+    return val1;
+}
 
-float megaOhms [] = {
-  
-  0.00001, 
-  0.00002, 
-  0.00003, 
-  0.00004, 
-  0.00006, 
-  0.00009, 
-  0.00014, 
-  0.00021, 
-  0.00032, 
-  0.00047, 
-  0.00071, 
-  0.00106, 
-  0.00159, 
-  0.00238, 
-  0.00356, 
-  0.00533, 
-  0.00798, 
-  0.01196, 
-  0.01791, 
-  0.02683, 
-  0.04018, 
-  0.06018, 
-  0.09014, 
-  0.13501, 
-  0.20222, 
-  0.5, 
-  0.63, 
-  0.8, 
-  0.95, 
-  1.45, 
-  2.09, 
-  3.02, 
-  4.6, 
-  7.3, 
-  11.3, 
-  18.2, 
-  32, 
-  63, 
-  125, 
-  265, 
-  630, 
-  1590, 
-  4790, 
-  14400, 
-  40000, 
-  120000
-};
+int search(float A[], int nLevels, float value) {
+  Serial.print("Arr[0]: ");
+  Serial.println(A[0]);
+  for(int i = 0; i < nLevels; i++){
+    if(A[i] == value){
+      return i;
+    }
+  }
+  return 100;
+}
 
-int nLevels = 46;
+float getMoisturePct(float arr[], int n, float target) {
+  if (target <= arr[0])
+    return arr[0];
+  if (target >= arr[n - 1])
+    return arr[n - 1];
+
+  // Doing binary search
+  int i = 0, j = n, mid = 0;
+  while (i < j) {
+    mid = (i + j) / 2;
+
+    if (arr[mid] == target)
+      return arr[mid];
+
+    /* If target is less than array element,
+          then search in left */
+    if (target < arr[mid]) {
+
+      // If target is greater than previous
+      // to mid, return closest of two
+      if (mid > 0 && target > arr[mid - 1])
+        return getClosest(arr[mid - 1],
+                          arr[mid], target);
+
+      /* Repeat for left half */
+      j = mid;
+    }
+
+    // If target is greater than mid
+    else {
+      if (mid < n - 1 && target < arr[mid + 1])
+        return getClosest(arr[mid],
+                          arr[mid + 1], target);
+        // update i
+        i = mid + 1; 
+    }
+  }
+
+  // Only single element left after search
+  return arr[mid];
+}
+
 
 void setup() {
   Serial.begin(9600);
@@ -253,20 +264,6 @@ void loop() {
       digitalWrite(DEHUM, LOW);
       Serial.println("Turning dehumidifier off");
     }
-//    if(temperature < 40) {
-//      digitalWrite(1, LOW);
-//      Serial.println("Turning lights on");
-//    } else if(temperature >= 40) {
-//      digitalWrite(1, LOW);
-//      Serial.println("Turning lights off");
-//    }
-//    if(humidity > 75.00) {
-//      digitalWrite(0, LOW);
-//      Serial.println("Turning dehumidifier on");
-//    } else if(humidity <= 75.00) {
-//      digitalWrite(0, LOW);
-//      Serial.println("Turning dehumidifier off");
-//    }
   } else if(moisturePct >= 25) { // Moisture content > 25%
     Serial.println(">25");
     if(temperature < 120 && digitalRead(LIGHT == LOW)) {
@@ -363,70 +360,7 @@ void loop() {
 
 
   // INTERVAL
-  delay(15000); // Delay for 15 seconds
+  delay(loopDelay); // Delay for 15 seconds
 
   
 }
-
-
-float getClosest(float val1, float val2, float target) {
-  if (target - val1 >= val2 - target)
-    return val2;
-  else
-    return val1;
-}
-
-int search(float A[], int nLevels, float value) {
-  Serial.print("Arr[0]: ");
-  Serial.println(A[0]);
-  for(int i = 0; i < nLevels; i++){
-    if(A[i] == value){
-      return i;
-    }
-  }
-  return 100;
-}
-
-float getMoisturePct(float arr[], int n, float target) {
-  if (target <= arr[0])
-    return arr[0];
-  if (target >= arr[n - 1])
-    return arr[n - 1];
-
-  // Doing binary search
-  int i = 0, j = n, mid = 0;
-  while (i < j) {
-    mid = (i + j) / 2;
-
-    if (arr[mid] == target)
-      return arr[mid];
-
-    /* If target is less than array element,
-          then search in left */
-    if (target < arr[mid]) {
-
-      // If target is greater than previous
-      // to mid, return closest of two
-      if (mid > 0 && target > arr[mid - 1])
-        return getClosest(arr[mid - 1],
-                          arr[mid], target);
-
-      /* Repeat for left half */
-      j = mid;
-    }
-
-    // If target is greater than mid
-    else {
-      if (mid < n - 1 && target < arr[mid + 1])
-        return getClosest(arr[mid],
-                          arr[mid + 1], target);
-        // update i
-        i = mid + 1; 
-    }
-  }
-
-  // Only single element left after search
-  return arr[mid];
-}
-
-
